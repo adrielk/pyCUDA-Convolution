@@ -58,7 +58,7 @@ import string
 
 # Pull out a bunch of stuff that was hard coded as pre-processor directives used
 # by both the kernel and calling code.
-KERNEL_RADIUS = 1 #1 for a 3x3 kernel
+KERNEL_RADIUS = 8 #1 for a 3x3 kernel
 UNROLL_INNER_LOOP = True
 KERNEL_W = 2 * KERNEL_RADIUS + 1
 ROW_TILE_W = 128
@@ -303,10 +303,13 @@ def sobel_kernel_vert(width = 3):
     filtery = numpy.float32(filtery)
     return filtery
 
+#this only works with width = 3
 def smooth_kernel(width = 3):
-    filterx = numpy.array([1,2,1])*(1/4)
+    filterx = numpy.array([1]*width)*(1/3)
+    #filterx = numpy.array([1,2,1])*(1/4)
     filterx = numpy.float32(filterx)
     return filterx
+
 
 
 def derivative_of_gaussian_kernel(width = KERNEL_W, sigma = 4):
@@ -382,11 +385,136 @@ def convolution_cuda(sourceImage,  filterx,  filtery):
     cuda.memcpy_dtoh(destImage,  destImage_gpu)
     return destImage
 
+#m is our input bfKernel, which we base our approximation off
+#This implemetnation is probably garabge.
+def low_rank_approx(m,image,rank = 1):
+  U,E,V = numpy.linalg.svd(m)
+  #mn = numpy.zeros_like(m)
+  #score = 0.0
+  
+  data = numpy.array(image)
+  redChan = data[:,:,0]
+  greenChan = data[:,:, 1]
+  blueChan = data[:, : , 2]
+
+  original = redChan #numpy.random.rand(768,  1024) * 255
+  original = numpy.float32(original)
+
+  original2 = greenChan
+  original2 = numpy.float32(original2)
+
+  original3 = blueChan
+  original3 = numpy.float32(original3)
+  
+  destImage = original.copy()
+  destImage2 = original2.copy()
+  destImage3 = original3.copy()
+  #destImage[:] = numpy.nan
+  #destImage2[:] = numpy.nan#I think it's just emptied
+  #destImage3[:] = numpy.nan#I think it's just emptied
+
+#this is just a guess as to how it works, actually do the research~!!1
+#THis is probably totally wrong, Give up for now and find out what actually works
+  print(E)
+  UPart = U[:,0]*-1
+  VPart = V[0,:]*-1
+  UPart = numpy.float64(UPart * numpy.sqrt(E[0]))
+  VPart = numpy.float64(VPart * numpy.sqrt(E[0]))
+  filtery = UPart
+  filterx = VPart
+  destImage = convolution_cuda(destImage,  filtery,  filterx)#*E[i]
+    
+  destImage2 = convolution_cuda(destImage2,  filtery,  filterx)#*E[i]
+    
+  destImage3 = convolution_cuda(destImage3,  filtery,  filterx)#*E[i]
+  dataConcatenated = numpy.dstack((destImage, destImage2, destImage3)).astype(numpy.uint8)#depth stack!!
+  imageFinal = Image.fromarray(dataConcatenated) 
+  return imageFinal
+"""
+  for i in range(rank):
+    filtery = U[:, i]
+    filterx = V[i, :]
+    
+    destImage = convolution_cuda(destImage,  filterx,  filtery)#*E[i]
+    
+    destImage2 = convolution_cuda(destImage2,  filterx,  filtery)#*E[i]
+    
+    destImage3 = convolution_cuda(destImage3,  filterx,  filtery)#*E[i]
+    
+    #np.outer represents our convoluto
+    #mn += E[i] * np.outer(U[:,i], V[i,:])
+    score += E[i]
+    "
+  dataConcatenated = numpy.dstack((destImage, destImage2, destImage3)).astype(numpy.uint8)#depth stack!!
+  imageFinal = Image.fromarray(dataConcatenated)
+
+  print('Approximation percentage, ', score / numpy.sum(E))
+  return imageFinal
+"""
+  #return mn
+def test_brighter_fatter():
+    bfKernel = numpy.float64(numpy.loadtxt('bfKernel.txt'))
+    image = Image.open('lena.png')
+    finalImage = low_rank_approx(bfKernel,image,rank = 4)
+    finalImage.save("BrighterFatterImg.png")
+    
+def test_gauss_separable():
+    gauss = gaussian_kernel()
+    boxKernel = numpy.float64(numpy.outer(gauss,gauss))
+    image = Image.open('lena.png')
+    finalImage = low_rank_approx(boxKernel,image,rank = 1)
+    finalImage.save("GaussImg.png")
+
+def test_bad_bf():
+    # Test the convolution kernel.
+    # Generate or load a test image    
+
+    image = Image.open('lena.png')
+    data = numpy.array(image)
+    redChan = data[:,:,0]
+    greenChan = data[:,:, 1]
+    blueChan = data[:, : , 2]
+    
+    original = redChan #numpy.random.rand(768,  1024) * 255
+    original = numpy.float32(original)
+    
+    original2 = greenChan
+    original2 = numpy.float32(original2)
+    
+    original3 = blueChan
+    original3 = numpy.float32(original3)
+    
+        # You probably want to display the image using the tool of your choice here.
+    filterx = numpy.loadtxt("rowBfKernel.txt")#smooth_kernel() #figure out how to make your own kernel 
+    filtery = numpy.loadtxt("colBfKernel.txt")
+    
+    #To try out:
+        #set filterx equal to some kernel thing manually (a numpy array)
+        #print stuff
+    
+    destImage = original.copy()
+    destImage[:] = numpy.nan
+    destImage = convolution_cuda(original,  filterx,  filtery)
+    
+    destImage2 = original2.copy()
+    destImage2[:] = numpy.nan#I think it's just emptied
+    destImage2 = convolution_cuda(original2,  filterx,  filtery)
+    
+    destImage3 = original3.copy()
+    destImage3[:] = numpy.nan#I think it's just emptied
+    destImage3 = convolution_cuda(original3,  filterx,  filtery)
+    
+    # You probably want to display the result image using the tool of your choice here.
+    dataConcatenated = numpy.dstack((destImage, destImage2, destImage3)).astype(numpy.uint8)#depth stack!!
+    imageFinal = Image.fromarray(dataConcatenated)
+    imageFinal.save("BadBfImg.png")
+
+    print ('Done running the convolution kernel!')
 
 def test_convolution_cuda():
     # Test the convolution kernel.
-    # Generate or load a test image
-    
+    # Generate or load a test image    
+
     image = Image.open('lena.png')
     data = numpy.array(image)
     redChan = data[:,:,0]
@@ -463,18 +591,22 @@ def test_convolution_cuda():
     destImage2[:] = numpy.nan#I think it's just emptied
     destImage2 = convolution_cuda(original2,  filterx,  filterx)
     
-    destImage3 = original2.copy()
+    destImage3 = original3.copy()
     destImage3[:] = numpy.nan#I think it's just emptied
     destImage3 = convolution_cuda(original3,  filterx,  filterx)
     
     # You probably want to display the result image using the tool of your choice here.
     dataConcatenated = numpy.dstack((destImage, destImage2, destImage3)).astype(numpy.uint8)#depth stack!!
     imageFinal = Image.fromarray(dataConcatenated)
-    imageFinal.save("FinalConvolvedImageSobel.png")
+    imageFinal.save("FinalConvolvedImageSmooth.png")
 
     print ('Done running the convolution kernel!')
 
 if __name__ == '__main__':
-    test_convolution_cuda()
+    #test_convolution_cuda()
+    
+    #test_bad_bf()
+    test_brighter_fatter()
+    #test_gauss_separable()
     #test_derivative_of_gaussian_kernel()
     #boo = raw_input('Pausing so you can look at results... <Enter> to finish...')
