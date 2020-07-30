@@ -58,7 +58,7 @@ import string
 
 # Pull out a bunch of stuff that was hard coded as pre-processor directives used
 # by both the kernel and calling code.
-KERNEL_RADIUS = 8 #1 for a 3x3 kernel
+KERNEL_RADIUS = 12#1 for a 3x3 kernel
 UNROLL_INNER_LOOP = True
 KERNEL_W = 2 * KERNEL_RADIUS + 1
 ROW_TILE_W = 128
@@ -376,8 +376,8 @@ def convolution_cuda(sourceImage,  filterx,  filtery):
     grid_cols = tuple([int(e) for e in blockGridColumns])
     block_cols = tuple([int(e) for e in threadBlockColumns])
     #TESTING CODE
-    print("Block rows \n",block_rows)
-    print("BLock columns \n",block_cols)
+   # print("Block rows \n",block_rows)
+  #  print("BLock columns \n",block_cols)
     convolutionRowGPU(intermediateImage_gpu,  sourceImage_gpu,  DATA_W,  DATA_H,  grid=grid_rows,  block=block_rows)
     convolutionColumnGPU(destImage_gpu,  intermediateImage_gpu,  DATA_W,  DATA_H,  numpy.int32(COLUMN_TILE_W * threadBlockColumns[1]),  numpy.int32(DATA_W * threadBlockColumns[1]),  grid=grid_cols,  block=block_cols)
 
@@ -452,18 +452,86 @@ def low_rank_approx(m,image,rank = 1):
   return imageFinal
 """
   #return mn
+  
+"""
+Kernel is a numpy 2D matrix, which will be separated using SVD
+image is also a numpy 2D matrix
+rank determines number of iterations. Comes at a performance cost.
+
+If this works with a bokeh effect kernel and guassian, you're golden, ready to integrte.
+"""
+def low_rank_approx_single_channel(kernel,image,rank = 1):
+  U,E,V = numpy.linalg.svd(kernel/numpy.sum(kernel))#normalized kernel
+  newImg = numpy.float32(numpy.zeros_like(image))#For rgb, this would be a 3D matrix
+
+  channel = numpy.float32(image)
+  for i in range(0, rank):
+      UPart = U[:,i]#*-1
+      VPart = V[i,:]#*-1
+      UPart = UPart# * numpy.sqrt(E[i])
+      VPart = VPart# * numpy.sqrt(E[i])
+      filtery = UPart
+      filterx = VPart
+      newImg += convolution_cuda(channel,  filtery,  filterx)*E[i]
+  return newImg
+
+"""
+NOTE: THIS ONLY WORKS FOR 32 bit images...we need 64 bit. probably need to change the kernel
+NOTE: Even after integration, must confirm this works.
+"""
+
+def low_rank_approx_rgb_channel(kernel,image,rank = 1):
+
+  U,E,V = numpy.linalg.svd(kernel/numpy.sum(kernel))#normalized kernel
+  newImg = numpy.float32(numpy.zeros_like(image))#For rgb, this would be a 3D matrix
+
+  for c in range(0,3):
+      channel = numpy.float32(image[:,:,c])
+      for i in range(0, rank):
+        UPart = U[:,i]#*-1
+        VPart = V[i,:]#*-1
+        UPart = UPart# * numpy.sqrt(E[i])
+        VPart = VPart# * numpy.sqrt(E[i])
+        filtery = UPart
+        filterx = VPart
+        newImg[:,:,c] += convolution_cuda(channel,  filtery,  filterx)*E[i]
+  return newImg
+
+
 def test_brighter_fatter():
     bfKernel = numpy.float64(numpy.loadtxt('bfKernel.txt'))
     image = Image.open('lena.png')
+    
     finalImage = low_rank_approx(bfKernel,image,rank = 4)
     finalImage.save("BrighterFatterImg.png")
+    
+def approx_convolve(kernel, input_matrix):
+    kernel = numpy.float64(kernel)#this might not be right for lsst codebase
     
 def test_gauss_separable():
     gauss = gaussian_kernel()
     boxKernel = numpy.float64(numpy.outer(gauss,gauss))
     image = Image.open('lena.png')
-    finalImage = low_rank_approx(boxKernel,image,rank = 1)
-    finalImage.save("GaussImg.png")
+    data = numpy.array(image)
+    finalImage = low_rank_approx_rgb_channel(boxKernel, data, rank = 1)
+    finalImagePicture = Image.fromarray(finalImage.astype(numpy.uint8))
+    finalImagePicture.save("GaussImg.png")
+    
+def bokeh_test():
+    x, y = numpy.meshgrid(numpy.linspace(-1, 1, 25), numpy.linspace(-1, 1, 25))
+    difference_of_gaussians = numpy.exp(-5 * (x*x+y*y))-numpy.exp(-6 * (x*x+y*y))
+    difference_of_gaussians /= numpy.max(difference_of_gaussians)
+    circle = numpy.array(x*x+y*y < 0.8, dtype='float64')
+
+    image = Image.open('lena.png')
+    data = numpy.array(image)
+    finalImage = low_rank_approx_rgb_channel(difference_of_gaussians, data, rank = 3)
+    finalImagePicture = Image.fromarray(finalImage.astype(numpy.uint8))
+    finalImagePicture.save("BokehImg.png")
+    
+    circleFinalImg = low_rank_approx_rgb_channel(circle, data, rank = 1)
+    circleFinalPicture = Image.fromarray(circleFinalImg.astype(numpy.uint8))
+    circleFinalPicture.save("CircleImgRank1.png")
 
 def test_bad_bf():
     # Test the convolution kernel.
@@ -604,9 +672,9 @@ def test_convolution_cuda():
 
 if __name__ == '__main__':
     #test_convolution_cuda()
-    
+    bokeh_test()
     #test_bad_bf()
-    test_brighter_fatter()
+    #test_brighter_fatter()
     #test_gauss_separable()
     #test_derivative_of_gaussian_kernel()
     #boo = raw_input('Pausing so you can look at results... <Enter> to finish...')

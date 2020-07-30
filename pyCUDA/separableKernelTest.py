@@ -22,7 +22,7 @@ def low_rank_approx(m, rank = 1):
 
 plt.style.use('seaborn-whitegrid')
  
-x, y = np.meshgrid(np.linspace(-1, 1, 50), np.linspace(-1, 1, 50))
+x, y = np.meshgrid(np.linspace(-1, 1, 17), np.linspace(-1, 1, 17))
 box = np.array(np.logical_and(np.abs(x) < 0.7, np.abs(y) < 0.7),dtype='float64') 
 gauss = np.exp(-5 * (x * x + y * y))
 #plt.matshow(np.hstack((gauss, box)), cmap='plasma')
@@ -41,7 +41,7 @@ VPart = np.float64(VPart * np.sqrt(E[0]))
 #bfResult = np.float64(np.outer(UPart, VPart))
 print(len(E))
                 
-bfResult = low_rank_approx(bfKernel, 4)
+bfResult = low_rank_approx(bfKernel, 9)#9 interations, virtually 100% matching(might just be as slow ;(
 
 mse = ((bfResult - bfKernel)**2).mean(axis = None)
 print(mse)
@@ -52,7 +52,26 @@ U2, E2, V2 = np.linalg.svd(bfResult)
 plt.matshow(np.hstack((bfKernel, bfResult)), cmap='plasma')
 plt.colorbar()
 
+plt.matshow(gauss, cmap='plasma')
+plt.colorbar()
 
+"""
+-----------------other non perfectly separable kernels
+"""
+circle = np.array(x*x+y*y < 0.8, dtype='float64')
+exponential = np.exp(-3 * np.sqrt(x*x+y*y))
+circleApprox = low_rank_approx(circle, rank = 1)
+ 
+hexagon = np.array(np.logical_and(np.logical_and(np.logical_and(np.logical_and(np.logical_and(np.logical_and(np.logical_and(x+y < 0.9*np.sqrt(2), x+y > -0.9*np.sqrt(2)),x-y < 0.9*np.sqrt(2)),-x+y < 0.9*np.sqrt(2)),x<0.9),x>-0.9),y<0.9),y>-0.9), dtype='float64')
+ 
+difference_of_gaussians = np.exp(-5 * (x*x+y*y))-np.exp(-6 * (x*x+y*y))
+difference_of_gaussians /= np.max(difference_of_gaussians)
+ 
+plt.matshow(np.vstack((np.hstack((circleApprox, hexagon)), np.hstack((exponential, difference_of_gaussians)))), cmap='plasma')
+plt.colorbar()
+
+
+print("Diff of gauss",difference_of_gaussians.shape)
 
 """
 #print(box)
