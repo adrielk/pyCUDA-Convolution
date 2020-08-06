@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import numpy
 #I guess numpy and PIL work well together?
-image = Image.open('lena.png')
+image = Image.open('fitstest.png')#.convert('LA')
 print(image)
 data = numpy.array(image)
 print(type(data))

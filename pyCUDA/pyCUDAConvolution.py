@@ -50,6 +50,7 @@ Edited by Adriel Kim:
 """
 
 import numpy
+import time
 from PIL import Image
 import pycuda.autoinit
 import pycuda.driver as cuda
@@ -58,7 +59,7 @@ import string
 
 # Pull out a bunch of stuff that was hard coded as pre-processor directives used
 # by both the kernel and calling code.
-KERNEL_RADIUS = 12#1 for a 3x3 kernel
+KERNEL_RADIUS = 8#12#1 for a 3x3 kernel
 UNROLL_INNER_LOOP = True
 KERNEL_W = 2 * KERNEL_RADIUS + 1
 ROW_TILE_W = 128
@@ -476,7 +477,6 @@ def low_rank_approx_single_channel(kernel,image,rank = 1):
   return newImg
 
 """
-NOTE: THIS ONLY WORKS FOR 32 bit images...we need 64 bit. probably need to change the kernel
 NOTE: Even after integration, must confirm this works.
 """
 
@@ -499,12 +499,21 @@ def low_rank_approx_rgb_channel(kernel,image,rank = 1):
 
 
 def test_brighter_fatter():
+    """
     bfKernel = numpy.float64(numpy.loadtxt('bfKernel.txt'))
     image = Image.open('lena.png')
     
     finalImage = low_rank_approx(bfKernel,image,rank = 4)
     finalImage.save("BrighterFatterImg.png")
+    """
+    bfKernel = numpy.float64(numpy.loadtxt('bfKernel.txt'))
     
+    image = Image.open('fitstest.png')
+    data = numpy.array(image)#[:,:,0]#gets only red layer
+    finalImage = low_rank_approx_rgb_channel(bfKernel, data, rank = 4)#low_rank_approx_single_channel(bfKernel, data, rank = 4)
+    finalImagePicture = Image.fromarray(finalImage.astype(numpy.uint8))#uint8 i think downgrades to 8 bit image...
+    finalImagePicture.save("bfImage.png")
+
 def approx_convolve(kernel, input_matrix):
     kernel = numpy.float64(kernel)#this might not be right for lsst codebase
     
@@ -672,9 +681,20 @@ def test_convolution_cuda():
 
 if __name__ == '__main__':
     #test_convolution_cuda()
-    bokeh_test()
+    #bokeh_test()
     #test_bad_bf()
-    #test_brighter_fatter()
+    
+    start = cuda.Event()#time.time()
+    end = cuda.Event()
+    start.record()
+    test_brighter_fatter()
+    end.record()
+    end.synchronize()
+    secs = start.time_till(end)*1e-3
+    print("Seconds: ", secs)
+    #end = time.time()
+    #print(end-start, " seconds")
+    
     #test_gauss_separable()
     #test_derivative_of_gaussian_kernel()
     #boo = raw_input('Pausing so you can look at results... <Enter> to finish...')
