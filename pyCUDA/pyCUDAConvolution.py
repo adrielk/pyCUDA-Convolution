@@ -57,6 +57,16 @@ import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
 import string
 
+#for image comparison
+
+def MSEImages(img1, img2):
+    diff = (img1-img2)**2
+    sumDiff = numpy.sum(diff)
+    mse = sumDiff/diff.size
+    return mse
+    
+    
+
 # Pull out a bunch of stuff that was hard coded as pre-processor directives used
 # by both the kernel and calling code.
 KERNEL_RADIUS = 8#12#1 for a 3x3 kernel
