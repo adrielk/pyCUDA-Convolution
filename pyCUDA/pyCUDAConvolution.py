@@ -472,7 +472,7 @@ rank determines number of iterations. Comes at a performance cost.
 If this works with a bokeh effect kernel and guassian, you're golden, ready to integrte.
 """
 def low_rank_approx_single_channel(kernel,image,rank = 1):
-  U,E,V = numpy.linalg.svd(kernel/numpy.sum(kernel))#normalized kernel
+  U,E,V = numpy.linalg.svd(kernel)#/numpy.sum(kernel))#normalized kernel
   newImg = numpy.float32(numpy.zeros_like(image))#For rgb, this would be a 3D matrix
 
   channel = numpy.float32(image)
@@ -483,6 +483,10 @@ def low_rank_approx_single_channel(kernel,image,rank = 1):
       VPart = VPart# * numpy.sqrt(E[i])
       filtery = UPart
       filterx = VPart
+      print("Filtery:",filtery)
+      print("Filterx:", filterx)
+      print("Filtery type:", numpy.dtype(filtery))
+      print("Filterx type:", numpy.dtype(filterx))
       newImg += convolution_cuda(channel,  filtery,  filterx)*E[i]
   return newImg
 
